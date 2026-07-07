@@ -3,13 +3,13 @@
 package http
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/ruangwali/internal/modules/identity/application/ports"
 	"github.com/ruangwali/internal/shared/application/requestcontext"
+	"github.com/ruangwali/internal/shared/presentation/httpresponse"
 )
 
 const (
@@ -155,39 +155,21 @@ func writeUnauthorized(
 	writer http.ResponseWriter,
 	err error,
 ) {
-	writer.Header().Set(
-		"Content-Type",
-		"application/json; charset=utf-8",
-	)
+	message := "autentikasi diperlukan"
+
+	if err != nil {
+		message = err.Error()
+	}
 
 	writer.Header().Set(
 		"Cache-Control",
 		"no-store",
 	)
 
-	writer.WriteHeader(
-		http.StatusUnauthorized,
-	)
-
-	response := unauthorizedResponse{
-		Error: unauthorizedError{
-			Code: "UNAUTHORIZED",
-
-			Message: err.Error(),
-		},
-	}
-
-	_ = json.NewEncoder(
+	httpresponse.Error(
 		writer,
-	).Encode(response)
-}
-
-type unauthorizedResponse struct {
-	Error unauthorizedError `json:"error"`
-}
-
-type unauthorizedError struct {
-	Code string `json:"code"`
-
-	Message string `json:"message"`
+		http.StatusUnauthorized,
+		"UNAUTHORIZED",
+		message,
+	)
 }

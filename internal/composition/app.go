@@ -12,9 +12,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	identityhttp "github.com/ruangwali/internal/modules/identity/presentation/http"
 	"github.com/ruangwali/internal/platform/buildinfo"
 	"github.com/ruangwali/internal/platform/config"
 	"github.com/ruangwali/internal/platform/database"
+	platformopenapi "github.com/ruangwali/internal/platform/openapi"
 )
 
 const (
@@ -42,7 +44,10 @@ type readinessResponse struct {
 func Build(
 	ctx context.Context,
 	cfg config.Config,
-) (*App, error) {
+) (
+	*App,
+	error,
+) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -58,18 +63,37 @@ func Build(
 		)
 	}
 
-	router := buildRouter(
+	identityModule, err := buildIdentityModule(
 		cfg,
 		db,
 	)
+	if err != nil {
+		db.Close()
+
+		return nil, fmt.Errorf(
+			"gagal membangun identity module: %w",
+			err,
+		)
+	}
+
+	router := buildRouter(
+		cfg,
+		db,
+		identityModule,
+	)
 
 	server := &http.Server{
-		Addr:              cfg.HTTP.Addr,
-		Handler:           router,
+		Addr: cfg.HTTP.Addr,
+
+		Handler: router,
+
 		ReadHeaderTimeout: defaultReadHeaderTimeout,
-		ReadTimeout:       defaultReadTimeout,
-		WriteTimeout:      defaultWriteTimeout,
-		IdleTimeout:       defaultIdleTimeout,
+
+		ReadTimeout: defaultReadTimeout,
+
+		WriteTimeout: defaultWriteTimeout,
+
+		IdleTimeout: defaultIdleTimeout,
 	}
 
 	return &App{
@@ -124,7 +148,9 @@ func (a *App) Shutdown(
 	var shutdownErr error
 
 	if a.server != nil {
-		if err := a.server.Shutdown(ctx); err != nil {
+		if err := a.server.Shutdown(
+			ctx,
+		); err != nil {
 			shutdownErr = fmt.Errorf(
 				"gagal menghentikan HTTP server: %w",
 				err,
@@ -142,9 +168,57 @@ func (a *App) Shutdown(
 func buildRouter(
 	cfg config.Config,
 	db *pgxpool.Pool,
+	identityModule *IdentityModule,
 ) http.Handler {
+	if db == nil {
+		panic(
+			"composition router: database pool nil",
+		)
+	}
+
+	if identityModule == nil {
+		panic(
+			"composition router: identity module nil",
+		)
+	}
+
+	if identityModule.Handler == nil {
+		panic(
+			"composition router: identity handler nil",
+		)
+	}
+
+	if identityModule.AuthMiddleware == nil {
+		panic(
+			"composition router: identity auth middleware nil",
+		)
+	}
+
 	router := chi.NewRouter()
 
+	mountHealthRoutes(
+		router,
+		cfg,
+		db,
+	)
+
+	mountOpenAPIRoutes(
+		router,
+	)
+
+	mountIdentityRoutes(
+		router,
+		identityModule,
+	)
+
+	return router
+}
+
+func mountHealthRoutes(
+	router chi.Router,
+	cfg config.Config,
+	db *pgxpool.Pool,
+) {
 	router.Get(
 		"/health/live",
 		handleLiveness,
@@ -157,16 +231,37 @@ func buildRouter(
 			db,
 		),
 	)
+}
 
-	return router
+func mountOpenAPIRoutes(
+	router chi.Router,
+) {
+	handler :=
+		platformopenapi.NewHandler()
+
+	platformopenapi.MountRoutes(
+		router,
+		handler,
+	)
+}
+
+func mountIdentityRoutes(
+	router chi.Router,
+	identityModule *IdentityModule,
+) {
+	identityhttp.MountRoutes(
+		router,
+		identityModule.Handler,
+		identityModule.AuthMiddleware,
+	)
 }
 
 func handleLiveness(
-	w http.ResponseWriter,
+	writer http.ResponseWriter,
 	_ *http.Request,
 ) {
 	writeJSON(
-		w,
+		writer,
 		http.StatusOK,
 		healthResponse{
 			Status: "ok",
@@ -179,11 +274,11 @@ func handleReadiness(
 	db *pgxpool.Pool,
 ) http.HandlerFunc {
 	return func(
-		w http.ResponseWriter,
-		r *http.Request,
+		writer http.ResponseWriter,
+		request *http.Request,
 	) {
 		ctx, cancel := context.WithTimeout(
-			r.Context(),
+			request.Context(),
 			timeout,
 		)
 		defer cancel()
@@ -196,12 +291,14 @@ func handleReadiness(
 			)
 
 			writeJSON(
-				w,
+				writer,
 				http.StatusServiceUnavailable,
 				readinessResponse{
-					Status:   "not_ready",
+					Status: "not_ready",
+
 					Database: "unavailable",
-					Build:    buildinfo.Current(),
+
+					Build: buildinfo.Current(),
 				},
 			)
 
@@ -209,30 +306,38 @@ func handleReadiness(
 		}
 
 		writeJSON(
-			w,
+			writer,
 			http.StatusOK,
 			readinessResponse{
-				Status:   "ready",
+				Status: "ready",
+
 				Database: "available",
-				Build:    buildinfo.Current(),
+
+				Build: buildinfo.Current(),
 			},
 		)
 	}
 }
 
 func writeJSON(
-	w http.ResponseWriter,
+	writer http.ResponseWriter,
 	status int,
 	payload any,
 ) {
-	w.Header().Set(
+	writer.Header().Set(
 		"Content-Type",
 		"application/json; charset=utf-8",
 	)
 
-	w.WriteHeader(status)
+	writer.WriteHeader(
+		status,
+	)
 
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
+	if err := json.NewEncoder(
+		writer,
+	).Encode(
+		payload,
+	); err != nil {
 		slog.Error(
 			"gagal encode HTTP response",
 			"error",

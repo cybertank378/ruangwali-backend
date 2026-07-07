@@ -17,8 +17,9 @@ const (
 	defaultJWTIssuer   = "ruangwali-api"
 	defaultJWTAudience = "ruangwali-web"
 
-	defaultAccessTokenTTLMinutes = 15
-	defaultRefreshTokenTTLDays   = 30
+	defaultAccessTokenTTLMinutes        = 15
+	defaultRefreshTokenTTLDays          = 30
+	defaultPasswordResetTokenTTLMinutes = 30
 
 	defaultDatabaseMaxConns = 20
 	defaultDatabaseMinConns = 2
@@ -61,8 +62,9 @@ type AuthConfig struct {
 	JWTAudience string
 	JWTSecret   string
 
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
+	AccessTokenTTL        time.Duration
+	RefreshTokenTTL       time.Duration
+	PasswordResetTokenTTL time.Duration
 }
 
 type IntegrationConfig struct {
@@ -131,6 +133,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	passwordResetTokenTTLMinutes, err := envInt(
+		"PASSWORD_RESET_TOKEN_TTL_MINUTES",
+		defaultPasswordResetTokenTTLMinutes,
+	)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		App: AppConfig{
 			Env: env(
@@ -148,7 +158,9 @@ func Load() (Config, error) {
 
 		Database: DatabaseConfig{
 			URL: strings.TrimSpace(
-				os.Getenv("DATABASE_URL"),
+				os.Getenv(
+					"DATABASE_URL",
+				),
 			),
 
 			MaxConns: int32(
@@ -178,7 +190,9 @@ func Load() (Config, error) {
 			),
 
 			JWTSecret: strings.TrimSpace(
-				os.Getenv("JWT_SECRET"),
+				os.Getenv(
+					"JWT_SECRET",
+				),
 			),
 
 			AccessTokenTTL: time.Duration(
@@ -188,6 +202,10 @@ func Load() (Config, error) {
 			RefreshTokenTTL: time.Duration(
 				refreshTokenTTLDays,
 			) * 24 * time.Hour,
+
+			PasswordResetTokenTTL: time.Duration(
+				passwordResetTokenTTLMinutes,
+			) * time.Minute,
 		},
 
 		Integration: IntegrationConfig{
@@ -231,6 +249,10 @@ func (c Config) Validate() error {
 		return err
 	}
 
+	if err := c.Integration.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -268,7 +290,9 @@ func (c AppConfig) IsProduction() bool {
 }
 
 func (c HTTPConfig) Validate() error {
-	if strings.TrimSpace(c.Addr) == "" {
+	if strings.TrimSpace(
+		c.Addr,
+	) == "" {
 		return errors.New(
 			"HTTP_ADDR wajib diisi",
 		)
@@ -278,7 +302,9 @@ func (c HTTPConfig) Validate() error {
 }
 
 func (c DatabaseConfig) Validate() error {
-	if strings.TrimSpace(c.URL) == "" {
+	if strings.TrimSpace(
+		c.URL,
+	) == "" {
 		return errors.New(
 			"DATABASE_URL wajib diisi",
 		)
@@ -324,19 +350,25 @@ func (c DatabaseConfig) Validate() error {
 }
 
 func (c AuthConfig) Validate() error {
-	if strings.TrimSpace(c.JWTIssuer) == "" {
+	if strings.TrimSpace(
+		c.JWTIssuer,
+	) == "" {
 		return errors.New(
 			"JWT_ISSUER wajib diisi",
 		)
 	}
 
-	if strings.TrimSpace(c.JWTAudience) == "" {
+	if strings.TrimSpace(
+		c.JWTAudience,
+	) == "" {
 		return errors.New(
 			"JWT_AUDIENCE wajib diisi",
 		)
 	}
 
-	if len(c.JWTSecret) < 32 {
+	if len(
+		c.JWTSecret,
+	) < 32 {
 		return errors.New(
 			"JWT_SECRET minimal 32 karakter",
 		)
@@ -354,6 +386,45 @@ func (c AuthConfig) Validate() error {
 		)
 	}
 
+	if c.PasswordResetTokenTTL <= 0 {
+		return errors.New(
+			"PASSWORD_RESET_TOKEN_TTL_MINUTES harus lebih besar dari 0",
+		)
+	}
+
+	return nil
+}
+
+func (c IntegrationConfig) Validate() error {
+	return c.GoogleAppsScript.Validate()
+}
+
+func (c GoogleAppsScriptConfig) Validate() error {
+	baseURL := strings.TrimSpace(
+		c.BaseURL,
+	)
+
+	webhookSecret := strings.TrimSpace(
+		c.WebhookSecret,
+	)
+
+	if baseURL == "" &&
+		webhookSecret == "" {
+		return nil
+	}
+
+	if baseURL == "" {
+		return errors.New(
+			"GOOGLE_APPS_SCRIPT_BASE_URL wajib diisi ketika integrasi Google Apps Script digunakan",
+		)
+	}
+
+	if webhookSecret == "" {
+		return errors.New(
+			"GOOGLE_APPS_SCRIPT_WEBHOOK_SECRET wajib diisi ketika integrasi Google Apps Script digunakan",
+		)
+	}
+
 	return nil
 }
 
@@ -362,7 +433,9 @@ func env(
 	fallback string,
 ) string {
 	value := strings.TrimSpace(
-		os.Getenv(key),
+		os.Getenv(
+			key,
+		),
 	)
 
 	if value == "" {
@@ -375,16 +448,23 @@ func env(
 func envInt(
 	key string,
 	fallback int,
-) (int, error) {
+) (
+	int,
+	error,
+) {
 	raw := strings.TrimSpace(
-		os.Getenv(key),
+		os.Getenv(
+			key,
+		),
 	)
 
 	if raw == "" {
 		return fallback, nil
 	}
 
-	value, err := strconv.Atoi(raw)
+	value, err := strconv.Atoi(
+		raw,
+	)
 	if err != nil {
 		return 0, fmt.Errorf(
 			"%s tidak valid: %w",
@@ -399,16 +479,23 @@ func envInt(
 func envDuration(
 	key string,
 	fallback time.Duration,
-) (time.Duration, error) {
+) (
+	time.Duration,
+	error,
+) {
 	raw := strings.TrimSpace(
-		os.Getenv(key),
+		os.Getenv(
+			key,
+		),
 	)
 
 	if raw == "" {
 		return fallback, nil
 	}
 
-	value, err := time.ParseDuration(raw)
+	value, err := time.ParseDuration(
+		raw,
+	)
 	if err != nil {
 		return 0, fmt.Errorf(
 			"%s tidak valid: %w",

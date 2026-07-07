@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -15,52 +13,95 @@ import (
 	"github.com/ruangwali/internal/platform/config"
 )
 
+const shutdownTimeout = 10 * time.Second
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(
+			"gagal memuat konfigurasi: ",
+			err,
+		)
 	}
 
-	info := buildinfo.Current()
-
-	app, err := composition.Build(context.Background(), cfg)
+	app, err := composition.Build(
+		context.Background(),
+		cfg,
+	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(
+			"gagal membangun aplikasi: ",
+			err,
+		)
 	}
-	defer app.Close()
 
-	server := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           app.Router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	runErr := make(
+		chan error,
+		1,
+	)
 
 	go func() {
 		log.Printf(
-			"%s API listening on %s version=%s commit=%s build_time=%s built_by=%s go=%s",
-			info.Name,
-			cfg.HTTPAddr,
-			info.Version,
-			info.Commit,
-			info.BuildTime,
-			info.BuiltBy,
-			info.GoVersion,
+			"RuangWali API listening on %s version=%s",
+			cfg.HTTP.Addr,
+			buildinfo.Version,
 		)
 
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
-		}
+		runErr <- app.Run()
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	signalCtx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	select {
+	case <-signalCtx.Done():
+		log.Print(
+			"shutdown signal received",
+		)
+
+	case err := <-runErr:
+		if err != nil {
+			log.Printf(
+				"application stopped unexpectedly: %v",
+				err,
+			)
+		}
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		shutdownTimeout,
+	)
 	defer cancel()
 
-	_ = server.Shutdown(ctx)
+	if err := app.Shutdown(
+		shutdownCtx,
+	); err != nil {
+		if errors.Is(
+			err,
+			context.DeadlineExceeded,
+		) {
+			log.Printf(
+				"graceful shutdown timeout: %v",
+				err,
+			)
+
+			return
+		}
+
+		log.Printf(
+			"gagal melakukan graceful shutdown: %v",
+			err,
+		)
+
+		return
+	}
+
+	log.Print(
+		"application stopped gracefully",
+	)
 }

@@ -2,49 +2,95 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ruangwali/internal/modules/accesscontrol/application/ports"
 )
 
 type PermissionResolver struct {
 	db *pgxpool.Pool
 }
 
-func NewPermissionResolver(db *pgxpool.Pool) *PermissionResolver {
-	return &PermissionResolver{db: db}
+func NewPermissionResolver(
+	db *pgxpool.Pool,
+) *PermissionResolver {
+	if db == nil {
+		panic(
+			"postgres permission resolver: db nil",
+		)
+	}
+
+	return &PermissionResolver{
+		db: db,
+	}
 }
 
-func (r *PermissionResolver) ResolveEffectivePermissions(
+func (r *PermissionResolver) ResolveByUserID(
 	ctx context.Context,
-	userID string,
-	tenantID string,
+	userID uuid.UUID,
 ) ([]string, error) {
 	const query = `
-SELECT DISTINCT p.code
-FROM memberships m
-JOIN membership_roles mr ON mr.membership_id = m.id
-JOIN roles r ON r.id = mr.role_id AND r.is_active = TRUE
-JOIN role_permissions rp ON rp.role_id = r.id
-JOIN permissions p ON p.id = rp.permission_id
-WHERE m.user_id = $1
-  AND m.tenant_id = $2
-  AND m.status = 'ACTIVE'
-  AND (r.tenant_id IS NULL OR r.tenant_id = $2)
-ORDER BY p.code`
+		SELECT DISTINCT
+			p.code
+		FROM user_roles ur
+		INNER JOIN roles r
+			ON r.id = ur.role_id
+		INNER JOIN role_permissions rp
+			ON rp.role_id = r.id
+		INNER JOIN permissions p
+			ON p.id = rp.permission_id
+		WHERE ur.user_id = $1
+		  AND r.is_active = TRUE
+		ORDER BY p.code ASC
+	`
 
-	rows, err := r.db.Query(ctx, query, userID, tenantID)
+	rows, err := r.db.Query(
+		ctx,
+		query,
+		userID,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(
+			"gagal mengambil permission user: %w",
+			err,
+		)
 	}
 	defer rows.Close()
 
-	result := make([]string, 0)
+	permissions := make(
+		[]string,
+		0,
+	)
+
 	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err != nil {
-			return nil, err
+		var permission string
+
+		if err := rows.Scan(
+			&permission,
+		); err != nil {
+			return nil, fmt.Errorf(
+				"gagal memindai permission user: %w",
+				err,
+			)
 		}
-		result = append(result, code)
+
+		permissions = append(
+			permissions,
+			permission,
+		)
 	}
-	return result, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf(
+			"gagal membaca hasil permission user: %w",
+			err,
+		)
+	}
+
+	return permissions, nil
 }
+
+var _ ports.PermissionResolver = (*PermissionResolver)(nil)
