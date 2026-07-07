@@ -1,6 +1,4 @@
--- =========================================================
--- ROLES
--- =========================================================
+
 
 INSERT INTO roles (
     code,
@@ -9,7 +7,9 @@ INSERT INTO roles (
     is_system,
     is_active
 )
-VALUES
+VALUES-- =========================================================
+-- ROLES
+-- =========================================================
     (
         'ADMIN',
         'Administrator',
@@ -25,9 +25,16 @@ VALUES
         TRUE
     ),
     (
+        'WALI_KELAS',
+        'Wali Kelas',
+        'Mengelola dan memantau data siswa pada kelas yang menjadi tanggung jawabnya',
+        TRUE,
+        TRUE
+    ),
+    (
         'WAKABID_KURIKULUM',
         'Wakabid Kurikulum',
-        'Mengelola fondasi akademik, kurikulum, dan penugasan guru',
+        'Mengelola fondasi akademik, kurikulum, kelas, dan penugasan guru',
         TRUE,
         TRUE
     )
@@ -244,7 +251,6 @@ WHERE r.code = 'ADMIN'
 
 -- =========================================================
 -- GURU PERMISSIONS
--- Scope tetap divalidasi oleh domain policy.
 -- =========================================================
 
 INSERT INTO role_permissions (
@@ -263,10 +269,36 @@ FROM roles r
                             'semester.read',
                             'subject.read',
                             'classroom.read',
+                            'teaching_assignment.read'
+                  )
+WHERE r.code = 'GURU'
+    ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- WALI KELAS PERMISSIONS
+-- =========================================================
+
+INSERT INTO role_permissions (
+    role_id,
+    permission_id
+)
+SELECT
+    r.id,
+    p.id
+FROM roles r
+         JOIN permissions p
+              ON p.code IN (
+                            'teacher.read',
+                            'student.read',
+                            'student.update',
+                            'academic_year.read',
+                            'semester.read',
+                            'subject.read',
+                            'classroom.read',
                             'teaching_assignment.read',
                             'homeroom_assignment.read'
                   )
-WHERE r.code = 'GURU'
+WHERE r.code = 'WALI_KELAS'
     ON CONFLICT DO NOTHING;
 
 -- =========================================================
@@ -299,4 +331,150 @@ FROM roles r
                             'homeroom_assignment.manage'
                   )
 WHERE r.code = 'WAKABID_KURIKULUM'
+    ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- DEVELOPMENT USERS
+--
+-- Password awal seluruh akun:
+-- RuangWali@2026
+--
+-- Argon2id:
+-- memory      = 65536 KiB
+-- iterations  = 3
+-- parallelism = 2
+-- salt length = 16 bytes
+-- key length  = 32 bytes
+-- =========================================================
+
+INSERT INTO users (
+    email,
+    password_hash,
+    status
+)
+SELECT
+    seed.email,
+    seed.password_hash,
+    seed.status
+FROM (
+         VALUES
+             (
+                 'admin@ruangwali.local',
+                 '$argon2id$v=19$m=65536,t=3,p=2$8Tfyq7eJT6sR3wsAmf7e1Q$upMO7fyvFzKTIljhj5+R2Zshm3QnPBV8sot6IzZn7IA',
+                 'ACTIVE'
+             ),
+             (
+                 'guru@ruangwali.local',
+                 '$argon2id$v=19$m=65536,t=3,p=2$Eojx/kZVRHhCViZ6yImAjA$jXp4fs6TqaK/WNir0UYdDQSDtJQRtdy2z9RmIfAbhFQ',
+                 'ACTIVE'
+             ),
+             (
+                 'walikelas@ruangwali.local',
+                 '$argon2id$v=19$m=65536,t=3,p=2$j7vhlfcFNRirXrPAi/9UZw$FaiYKQ0zGsXhhFmh0cBp72C/SdvJZFmTfBcN8JNrP/c',
+                 'ACTIVE'
+             ),
+             (
+                 'kurikulum@ruangwali.local',
+                 '$argon2id$v=19$m=65536,t=3,p=2$Fk9HDF7Q2QIPtfhvbVFt8A$PFiADm1maDNgHj0Z93eqG/YA8QZJ/EfqwDpLGcAV5kM',
+                 'ACTIVE'
+             )
+     ) AS seed (
+                email,
+                password_hash,
+                status
+    )
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM users u
+    WHERE LOWER(BTRIM(u.email)) =
+          LOWER(BTRIM(seed.email))
+);
+
+-- =========================================================
+-- ADMIN USER ROLE
+-- =========================================================
+
+INSERT INTO user_roles (
+    user_id,
+    role_id,
+    assigned_by
+)
+SELECT
+    u.id,
+    r.id,
+    NULL
+FROM users u
+         JOIN roles r
+              ON r.code = 'ADMIN'
+WHERE LOWER(BTRIM(u.email)) =
+      'admin@ruangwali.local'
+    ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- GURU USER ROLE
+-- =========================================================
+
+INSERT INTO user_roles (
+    user_id,
+    role_id,
+    assigned_by
+)
+SELECT
+    u.id,
+    r.id,
+    admin_user.id
+FROM users u
+         JOIN roles r
+              ON r.code = 'GURU'
+         LEFT JOIN users admin_user
+                   ON LOWER(BTRIM(admin_user.email)) =
+                      'admin@ruangwali.local'
+WHERE LOWER(BTRIM(u.email)) =
+      'guru@ruangwali.local'
+    ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- WALI KELAS USER ROLE
+-- =========================================================
+
+INSERT INTO user_roles (
+    user_id,
+    role_id,
+    assigned_by
+)
+SELECT
+    u.id,
+    r.id,
+    admin_user.id
+FROM users u
+         JOIN roles r
+              ON r.code = 'WALI_KELAS'
+         LEFT JOIN users admin_user
+                   ON LOWER(BTRIM(admin_user.email)) =
+                      'admin@ruangwali.local'
+WHERE LOWER(BTRIM(u.email)) =
+      'walikelas@ruangwali.local'
+    ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- WAKABID KURIKULUM USER ROLE
+-- =========================================================
+
+INSERT INTO user_roles (
+    user_id,
+    role_id,
+    assigned_by
+)
+SELECT
+    u.id,
+    r.id,
+    admin_user.id
+FROM users u
+         JOIN roles r
+              ON r.code = 'WAKABID_KURIKULUM'
+         LEFT JOIN users admin_user
+                   ON LOWER(BTRIM(admin_user.email)) =
+                      'admin@ruangwali.local'
+WHERE LOWER(BTRIM(u.email)) =
+      'kurikulum@ruangwali.local'
     ON CONFLICT DO NOTHING;

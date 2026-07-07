@@ -17,14 +17,41 @@
 │   │   │   │   ├── postgres
 │   │   │   │   │   ├── permission_resolver.go
 │   │   ├── identity
+│   │   │   ├── application
+│   │   │   │   ├── dto
+│   │   │   │   │   ├── auth_request.go
+│   │   │   │   │   ├── auth_response.go
+│   │   │   │   ├── ports
+│   │   │   │   │   ├── password_hasher.go
+│   │   │   │   │   ├── token_service.go
+│   │   │   │   ├── usecase
+│   │   │   │   │   ├── get_current_user.go
+│   │   │   │   │   ├── login.go
+│   │   │   │   │   ├── logout.go
+│   │   │   │   │   ├── refresh_token.go
 │   │   │   ├── domain
 │   │   │   │   ├── entity
+│   │   │   │   │   ├── refresh_session.go
 │   │   │   │   │   ├── user.go
+│   │   │   │   ├── repository
+│   │   │   │   │   ├── session_repository.go
+│   │   │   │   │   ├── UserRepository.go
 │   │   │   │   ├── valueobject
+│   │   │   │   │   ├── email.go
+│   │   │   │   │   ├── session_fingerprint.go
 │   │   │   │   │   ├── user_status.go
+│   │   │   │   ├── errors.go
 │   │   │   ├── infrastructure
+│   │   │   │   ├── postgres
+│   │   │   │   │   ├── errors.go
+│   │   │   │   │   ├── session_repository.go
+│   │   │   │   │   ├── session_row.go
+│   │   │   │   │   ├── user_repository.go
+│   │   │   │   │   ├── user_row.go
 │   │   │   │   ├── security
 │   │   │   │   │   ├── jwt.go
+│   │   │   │   │   ├── password_hasher.go
+│   │   │   │   │   ├── refresh_token.go
 │   │   │   ├── presentation
 │   │   │   │   ├── http
 │   │   │   │   │   ├── middleware.go
@@ -51,6 +78,8 @@
 │   │   ├── application
 │   │   │   ├── pagination
 │   │   │   │   ├── pagination.go
+│   │   │   ├── requestcontext
+│   │   │   │   ├── context.go
 │   │   ├── domain
 │   │   │   ├── errors.go
 │   │   ├── presentation
@@ -71,7 +100,10 @@
 │   ├── 000006_identity_sessions.up.sql
 │   ├── 000007_google_integrations.down.sql
 │   ├── 000007_google_integrations.up.sql
+│   ├── 000008_identity_password_resets.down.sql
+│   ├── 000008_identity_password_resets.up.sql
 ├── .env
+├── .gitignore
 ├── cleanTree.ps1
 ├── go.mod
 ├── go.sum
