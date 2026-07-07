@@ -1,0 +1,58 @@
+├── cmd
+│   ├── api
+│   │   ├── main.go
+│   ├── migrate
+│   │   ├── main.go
+├── internal
+│   ├── composition
+│   │   ├── app.go
+│   ├── modules
+│   │   ├── accesscontrol
+│   │   │   ├── application
+│   │   │   │   ├── ports.go
+│   │   │   ├── domain
+│   │   │   │   ├── permission.go
+│   │   │   │   ├── role.go
+│   │   │   ├── infrastructure
+│   │   │   │   ├── postgres
+│   │   │   │   │   ├── permission_resolver.go
+│   │   ├── identity
+│   │   │   ├── infrastructure
+│   │   │   │   ├── security
+│   │   │   │   │   ├── jwt.go
+│   │   │   ├── presentation
+│   │   │   │   ├── http
+│   │   │   │   │   ├── middleware.go
+│   │   ├── student
+│   │   │   ├── application
+│   │   │   │   ├── create_student.go
+│   │   │   ├── domain
+│   │   │   │   ├── repository.go
+│   │   │   │   ├── student.go
+│   │   │   ├── infrastructure
+│   │   │   │   ├── postgres
+│   │   │   │   │   ├── repository.go
+│   │   │   ├── presentation
+│   │   │   │   ├── http
+│   │   │   │   │   ├── handler.go
+│   ├── platform
+│   │   ├── buildinfo
+│   │   │   ├── info.go
+│   │   ├── config
+│   │   │   ├── config.go
+│   ├── shared
+│   │   ├── application
+│   │   │   ├── requestcontext
+│   │   │   │   ├── context.go
+│   │   ├── domain
+│   │   │   ├── errors.go
+├── migrations
+│   ├── 000001_init.down.sql
+│   ├── 000001_init.up.sql
+│   ├── 000002_seed_rbac.down.sql
+│   ├── 000002_seed_rbac.up.sql
+├── .env
+├── cleanTree.ps1
+├── go.mod
+├── go.sum
+├── RuangWali.iml
