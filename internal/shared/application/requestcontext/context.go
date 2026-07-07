@@ -1,26 +1,48 @@
 package requestcontext
 
-import "context"
+import (
+	"context"
 
-type Principal struct {
-	UserID       string
-	TenantID     string
-	MembershipID string
-	Permissions  map[string]struct{}
+	"github.com/google/uuid"
+)
+
+type contextKey uint8
+
+const (
+	authenticatedUserIDKey contextKey = iota
+)
+
+func WithUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+) context.Context {
+	return context.WithValue(
+		ctx,
+		authenticatedUserIDKey,
+		userID,
+	)
 }
 
-func (p Principal) HasPermission(code string) bool {
-	_, ok := p.Permissions[code]
-	return ok
+func UserID(
+	ctx context.Context,
+) (uuid.UUID, bool) {
+	if ctx == nil {
+		return uuid.Nil, false
+	}
+
+	userID, ok := ctx.Value(
+		authenticatedUserIDKey,
+	).(uuid.UUID)
+
+	if !ok || userID == uuid.Nil {
+		return uuid.Nil, false
+	}
+
+	return userID, true
 }
 
-type key struct{}
-
-func WithPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, key{}, principal)
-}
-
-func PrincipalFrom(ctx context.Context) (Principal, bool) {
-	p, ok := ctx.Value(key{}).(Principal)
-	return p, ok
+func RequireUserID(
+	ctx context.Context,
+) (uuid.UUID, bool) {
+	return UserID(ctx)
 }

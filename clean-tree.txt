@@ -1,0 +1,78 @@
+├── cmd
+│   ├── api
+│   │   ├── main.go
+│   ├── migrate
+│   │   ├── main.go
+├── internal
+│   ├── composition
+│   │   ├── app.go
+│   ├── modules
+│   │   ├── accesscontrol
+│   │   │   ├── application
+│   │   │   │   ├── ports.go
+│   │   │   ├── domain
+│   │   │   │   ├── permission.go
+│   │   │   │   ├── role.go
+│   │   │   ├── infrastructure
+│   │   │   │   ├── postgres
+│   │   │   │   │   ├── permission_resolver.go
+│   │   ├── identity
+│   │   │   ├── domain
+│   │   │   │   ├── entity
+│   │   │   │   │   ├── user.go
+│   │   │   │   ├── valueobject
+│   │   │   │   │   ├── user_status.go
+│   │   │   ├── infrastructure
+│   │   │   │   ├── security
+│   │   │   │   │   ├── jwt.go
+│   │   │   ├── presentation
+│   │   │   │   ├── http
+│   │   │   │   │   ├── middleware.go
+│   │   ├── student
+│   │   │   ├── application
+│   │   │   │   ├── create_student.go
+│   │   │   ├── domain
+│   │   │   │   ├── repository.go
+│   │   │   │   ├── student.go
+│   │   │   ├── infrastructure
+│   │   │   │   ├── postgres
+│   │   │   │   │   ├── repository.go
+│   │   │   ├── presentation
+│   │   │   │   ├── http
+│   │   │   │   │   ├── handler.go
+│   ├── platform
+│   │   ├── buildinfo
+│   │   │   ├── info.go
+│   │   ├── config
+│   │   │   ├── config.go
+│   │   ├── database
+│   │   │   ├── postgres.go
+│   ├── shared
+│   │   ├── application
+│   │   │   ├── pagination
+│   │   │   │   ├── pagination.go
+│   │   ├── domain
+│   │   │   ├── errors.go
+│   │   ├── presentation
+│   │   │   ├── httpresponse
+│   │   │   │   ├── response.go
+├── migrations
+│   ├── 000001_identity_rbac.down.sql
+│   ├── 000001_identity_rbac.up.sql
+│   ├── 000002_seed_rbac.down.sql
+│   ├── 000002_seed_rbac.up.sql
+│   ├── 000003_academic_foundation.down.sql
+│   ├── 000003_academic_foundation.up.sql
+│   ├── 000004_students.down.sql
+│   ├── 000004_students.up.sql
+│   ├── 000005_teacher_assignments.down.sql
+│   ├── 000005_teacher_assignments.up.sql
+│   ├── 000006_identity_sessions.down.sql
+│   ├── 000006_identity_sessions.up.sql
+│   ├── 000007_google_integrations.down.sql
+│   ├── 000007_google_integrations.up.sql
+├── .env
+├── cleanTree.ps1
+├── go.mod
+├── go.sum
+├── RuangWali.iml
