@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS classrooms;
+DROP TABLE IF EXISTS subjects;
+DROP TABLE IF EXISTS semesters;
+DROP TABLE IF EXISTS academic_years;
+DROP TABLE IF EXISTS teachers;

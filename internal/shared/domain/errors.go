@@ -3,8 +3,23 @@ package domain
 import "errors"
 
 var (
-	ErrNotFound  = errors.New("resource tidak ditemukan")
-	ErrConflict  = errors.New("resource conflict")
-	ErrForbidden = errors.New("akses ditolak")
-	ErrInvalid   = errors.New("data tidak valid")
+	ErrValidation = errors.New(
+		"validation error",
+	)
+
+	ErrNotFound = errors.New(
+		"resource not found",
+	)
+
+	ErrConflict = errors.New(
+		"resource conflict",
+	)
+
+	ErrUnauthorized = errors.New(
+		"authentication required",
+	)
+
+	ErrForbidden = errors.New(
+		"access forbidden",
+	)
 )

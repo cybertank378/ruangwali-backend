@@ -2,58 +2,40 @@ package security
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v4/jwa"
 	"github.com/lestrrat-go/jwx/v4/jwt"
-)
 
-const (
-	tenantIDClaimKey     = "tenant_id"
-	membershipIDClaimKey = "membership_id"
+	"github.com/ruangwali/internal/modules/identity/application/ports"
 )
 
 var (
-	ErrInvalidToken = errors.New(
-		"token tidak valid",
+	ErrInvalidAccessToken = errors.New(
+		"access token tidak valid",
 	)
 
 	ErrMissingSubject = errors.New(
 		"subject claim tidak tersedia",
 	)
 
-	ErrMissingTenantID = errors.New(
-		"tenant_id claim tidak tersedia",
-	)
-
-	ErrInvalidTenantID = errors.New(
-		"tenant_id claim tidak valid",
-	)
-
-	ErrMissingMembershipID = errors.New(
-		"membership_id claim tidak tersedia",
-	)
-
-	ErrInvalidMembershipID = errors.New(
-		"membership_id claim tidak valid",
+	ErrInvalidSubject = errors.New(
+		"subject claim tidak valid",
 	)
 )
 
 type TokenService struct {
-	issuer   string
-	audience string
-	secret   []byte
-	ttl      time.Duration
-}
+	issuer string
 
-type Claims struct {
-	UserID       string
-	TenantID     string
-	MembershipID string
+	audience string
+
+	secret []byte
+
+	ttl time.Duration
 }
 
 func NewTokenService(
@@ -61,31 +43,64 @@ func NewTokenService(
 	audience string,
 	secret string,
 	ttl time.Duration,
-) *TokenService {
-	return &TokenService{
-		issuer: strings.TrimSpace(
-			issuer,
-		),
-		audience: strings.TrimSpace(
-			audience,
-		),
-		secret: []byte(
-			secret,
-		),
-		ttl: ttl,
+) (*TokenService, error) {
+	issuer = strings.TrimSpace(
+		issuer,
+	)
+
+	audience = strings.TrimSpace(
+		audience,
+	)
+
+	secret = strings.TrimSpace(
+		secret,
+	)
+
+	if issuer == "" {
+		return nil, errors.New(
+			"JWT issuer wajib diisi",
+		)
 	}
+
+	if audience == "" {
+		return nil, errors.New(
+			"JWT audience wajib diisi",
+		)
+	}
+
+	if len(secret) < 32 {
+		return nil, errors.New(
+			"JWT secret minimal 32 karakter",
+		)
+	}
+
+	if ttl <= 0 {
+		return nil, errors.New(
+			"JWT TTL harus lebih besar dari 0",
+		)
+	}
+
+	return &TokenService{
+		issuer: issuer,
+
+		audience: audience,
+
+		secret: []byte(secret),
+
+		ttl: ttl,
+	}, nil
 }
 
 func (s *TokenService) Issue(
 	ctx context.Context,
-	claims Claims,
+	claims ports.AccessTokenClaims,
 ) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 
-	if err := s.validateClaims(claims); err != nil {
-		return "", err
+	if claims.UserID == uuid.Nil {
+		return "", ErrInvalidSubject
 	}
 
 	now := time.Now().UTC()
@@ -100,27 +115,13 @@ func (s *TokenService) Issue(
 			},
 		).
 		Subject(
-			strings.TrimSpace(
-				claims.UserID,
-			),
+			claims.UserID.String(),
 		).
 		IssuedAt(
 			now,
 		).
 		Expiration(
 			now.Add(s.ttl),
-		).
-		Claim(
-			tenantIDClaimKey,
-			strings.TrimSpace(
-				claims.TenantID,
-			),
-		).
-		Claim(
-			membershipIDClaimKey,
-			strings.TrimSpace(
-				claims.MembershipID,
-			),
 		).
 		Build()
 	if err != nil {
@@ -150,15 +151,18 @@ func (s *TokenService) Issue(
 func (s *TokenService) Parse(
 	ctx context.Context,
 	raw string,
-) (Claims, error) {
+) (ports.AccessTokenClaims, error) {
 	if err := ctx.Err(); err != nil {
-		return Claims{}, err
+		return ports.AccessTokenClaims{}, err
 	}
 
-	raw = strings.TrimSpace(raw)
+	raw = strings.TrimSpace(
+		raw,
+	)
 
 	if raw == "" {
-		return Claims{}, ErrInvalidToken
+		return ports.AccessTokenClaims{},
+			ErrInvalidAccessToken
 	}
 
 	token, err := jwt.Parse(
@@ -176,116 +180,46 @@ func (s *TokenService) Parse(
 		),
 	)
 	if err != nil {
-		return Claims{}, fmt.Errorf(
-			"%w: %v",
-			ErrInvalidToken,
-			err,
-		)
+		return ports.AccessTokenClaims{},
+			fmt.Errorf(
+				"%w: %v",
+				ErrInvalidAccessToken,
+				err,
+			)
 	}
 
-	return extractClaims(token)
-}
-
-func (s *TokenService) validateClaims(
-	claims Claims,
-) error {
-	if strings.TrimSpace(
-		claims.UserID,
-	) == "" {
-		return ErrMissingSubject
-	}
-
-	if strings.TrimSpace(
-		claims.TenantID,
-	) == "" {
-		return ErrMissingTenantID
-	}
-
-	if strings.TrimSpace(
-		claims.MembershipID,
-	) == "" {
-		return ErrMissingMembershipID
-	}
-
-	return nil
-}
-
-func extractClaims(
-	token jwt.Token,
-) (Claims, error) {
-	userID, ok := token.Subject()
+	subject, ok := token.Subject()
 	if !ok {
-		return Claims{}, ErrMissingSubject
+		return ports.AccessTokenClaims{},
+			ErrMissingSubject
 	}
 
-	userID = strings.TrimSpace(userID)
-
-	if userID == "" {
-		return Claims{}, ErrMissingSubject
-	}
-
-	payload, err := json.Marshal(token)
-	if err != nil {
-		return Claims{}, fmt.Errorf(
-			"gagal membaca token claims: %w",
-			err,
-		)
-	}
-
-	var customClaims struct {
-		TenantID     string `json:"tenant_id"`
-		MembershipID string `json:"membership_id"`
-	}
-
-	if err := json.Unmarshal(payload, &customClaims); err != nil {
-		return Claims{}, fmt.Errorf(
-			"gagal decode token claims: %w",
-			err,
-		)
-	}
-
-	tenantID := strings.TrimSpace(customClaims.TenantID)
-	if tenantID == "" {
-		return Claims{}, ErrMissingTenantID
-	}
-
-	membershipID := strings.TrimSpace(
-		customClaims.MembershipID,
+	subject = strings.TrimSpace(
+		subject,
 	)
-	if membershipID == "" {
-		return Claims{}, ErrMissingMembershipID
+
+	if subject == "" {
+		return ports.AccessTokenClaims{},
+			ErrMissingSubject
 	}
 
-	return Claims{
-		UserID:       userID,
-		TenantID:     tenantID,
-		MembershipID: membershipID,
+	userID, err := uuid.Parse(
+		subject,
+	)
+	if err != nil {
+		return ports.AccessTokenClaims{},
+			fmt.Errorf(
+				"%w: %v",
+				ErrInvalidSubject,
+				err,
+			)
+	}
+
+	return ports.AccessTokenClaims{
+		UserID: userID,
 	}, nil
 }
 
-func getStringPrivateClaim(
-	privateClaims map[string]any,
-	key string,
-	missingErr error,
-	invalidErr error,
-) (string, error) {
-	value, ok := privateClaims[key]
-	if !ok {
-		return "", missingErr
-	}
-
-	stringValue, ok := value.(string)
-	if !ok {
-		return "", invalidErr
-	}
-
-	stringValue = strings.TrimSpace(
-		stringValue,
-	)
-
-	if stringValue == "" {
-		return "", invalidErr
-	}
-
-	return stringValue, nil
+func (s *TokenService) TTL() time.Duration {
+	return s.ttl
 }

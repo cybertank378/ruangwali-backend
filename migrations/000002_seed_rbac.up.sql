@@ -1,127 +1,302 @@
-INSERT INTO permissions (code, resource, action, description) VALUES
-('dashboard.read','dashboard','read','Melihat dashboard'),
-('student.read','student','read','Melihat siswa'),
-('student.create','student','create','Menambah siswa'),
-('student.update','student','update','Mengubah siswa'),
-('student.delete','student','delete','Menghapus siswa'),
-('student.import','student','import','Impor siswa'),
-('student.export','student','export','Ekspor siswa'),
-('guardian.read','guardian','read','Melihat wali'),
-('guardian.create','guardian','create','Menambah wali'),
-('guardian.update','guardian','update','Mengubah wali'),
-('guardian.delete','guardian','delete','Menghapus wali'),
-('classroom.read','classroom','read','Melihat kelas'),
-('classroom.update','classroom','update','Mengubah kelas'),
-('classroom.organization.read','classroom.organization','read','Melihat struktur kelas'),
-('classroom.organization.manage','classroom.organization','manage','Mengelola struktur kelas'),
-('classroom.schedule.read','classroom.schedule','read','Melihat jadwal'),
-('classroom.schedule.manage','classroom.schedule','manage','Mengelola jadwal'),
-('classroom.duty.read','classroom.duty','read','Melihat piket'),
-('classroom.duty.manage','classroom.duty','manage','Mengelola piket'),
-('classroom.seating.read','classroom.seating','read','Melihat denah'),
-('classroom.seating.manage','classroom.seating','manage','Mengelola denah'),
-('classroom.agreement.read','classroom.agreement','read','Melihat kesepakatan'),
-('classroom.agreement.manage','classroom.agreement','manage','Mengelola kesepakatan'),
-('attendance.read','attendance','read','Melihat absensi'),
-('attendance.record','attendance','record','Mencatat absensi'),
-('attendance.update','attendance','update','Mengubah absensi'),
-('attendance.delete','attendance','delete','Menghapus absensi'),
-('attendance.export','attendance','export','Ekspor absensi'),
-('assessment.read','assessment','read','Melihat nilai'),
-('assessment.record','assessment','record','Mencatat nilai'),
-('assessment.update','assessment','update','Mengubah nilai'),
-('assessment.delete','assessment','delete','Menghapus nilai'),
-('assessment.export','assessment','export','Ekspor nilai'),
-('achievement.read','achievement','read','Melihat prestasi'),
-('achievement.create','achievement','create','Menambah prestasi'),
-('achievement.update','achievement','update','Mengubah prestasi'),
-('achievement.delete','achievement','delete','Menghapus prestasi'),
-('violation.read','violation','read','Melihat pelanggaran'),
-('violation.create','violation','create','Menambah pelanggaran'),
-('violation.update','violation','update','Mengubah pelanggaran'),
-('violation.delete','violation','delete','Menghapus pelanggaran'),
-('journal.read','journal','read','Melihat jurnal'),
-('journal.create','journal','create','Menambah jurnal'),
-('journal.update','journal','update','Mengubah jurnal'),
-('journal.delete','journal','delete','Menghapus jurnal'),
-('school.read','school','read','Melihat sekolah'),
-('school.update','school','update','Mengubah sekolah'),
-('user.read','user','read','Melihat user'),
-('user.create','user','create','Menambah user'),
-('user.update','user','update','Mengubah user'),
-('user.deactivate','user','deactivate','Menonaktifkan user'),
-('role.read','role','read','Melihat role'),
-('role.manage','role','manage','Mengelola role'),
-('role.assign','role','assign','Menetapkan role'),
-('audit.read','audit','read','Melihat audit'),
-('backup.create','backup','create','Membuat backup'),
-('backup.restore','backup','restore','Memulihkan backup'),
-('system.reset','system','reset','Reset data sistem')
-ON CONFLICT (code) DO NOTHING;
+-- =========================================================
+-- ROLES
+-- =========================================================
 
-INSERT INTO roles (code, name, description, is_system)
+INSERT INTO roles (
+    code,
+    name,
+    description,
+    is_system,
+    is_active
+)
 VALUES
-('SUPER_ADMIN','Super Admin','Operator platform RuangWali',TRUE),
-('SCHOOL_ADMIN','School Admin','Administrator tenant sekolah',TRUE),
-('HOMEROOM_TEACHER','Homeroom Teacher','Wali kelas',TRUE),
-('SUBJECT_TEACHER','Subject Teacher','Guru mata pelajaran',TRUE)
-ON CONFLICT DO NOTHING;
+    (
+        'ADMIN',
+        'Administrator',
+        'Mengelola sistem, pengguna, akses, dan integrasi',
+        TRUE,
+        TRUE
+    ),
+    (
+        'GURU',
+        'Guru',
+        'Mengakses data akademik sesuai penugasan mengajar',
+        TRUE,
+        TRUE
+    ),
+    (
+        'WAKABID_KURIKULUM',
+        'Wakabid Kurikulum',
+        'Mengelola fondasi akademik, kurikulum, dan penugasan guru',
+        TRUE,
+        TRUE
+    )
+    ON CONFLICT (code) DO NOTHING;
 
--- SUPER_ADMIN: semua permission
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r CROSS JOIN permissions p
-WHERE r.code = 'SUPER_ADMIN'
-ON CONFLICT DO NOTHING;
+-- =========================================================
+-- PERMISSIONS
+-- =========================================================
 
--- SCHOOL_ADMIN: semua tenant capability kecuali system.reset
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r CROSS JOIN permissions p
-WHERE r.code = 'SCHOOL_ADMIN'
-  AND p.code <> 'system.reset'
-ON CONFLICT DO NOTHING;
+INSERT INTO permissions (
+    code,
+    resource,
+    action,
+    description
+)
+VALUES
+    (
+        'user.read',
+        'user',
+        'read',
+        'Melihat data pengguna'
+    ),
+    (
+        'user.create',
+        'user',
+        'create',
+        'Membuat pengguna'
+    ),
+    (
+        'user.update',
+        'user',
+        'update',
+        'Memperbarui pengguna'
+    ),
+    (
+        'user.delete',
+        'user',
+        'delete',
+        'Menghapus pengguna'
+    ),
+    (
+        'role.read',
+        'role',
+        'read',
+        'Melihat role'
+    ),
+    (
+        'role.manage',
+        'role',
+        'manage',
+        'Mengelola role'
+    ),
+    (
+        'permission.read',
+        'permission',
+        'read',
+        'Melihat permission'
+    ),
+    (
+        'teacher.read',
+        'teacher',
+        'read',
+        'Melihat data guru'
+    ),
+    (
+        'teacher.create',
+        'teacher',
+        'create',
+        'Membuat data guru'
+    ),
+    (
+        'teacher.update',
+        'teacher',
+        'update',
+        'Memperbarui data guru'
+    ),
+    (
+        'teacher.delete',
+        'teacher',
+        'delete',
+        'Menghapus data guru'
+    ),
+    (
+        'student.read',
+        'student',
+        'read',
+        'Melihat data siswa'
+    ),
+    (
+        'student.create',
+        'student',
+        'create',
+        'Membuat data siswa'
+    ),
+    (
+        'student.update',
+        'student',
+        'update',
+        'Memperbarui data siswa'
+    ),
+    (
+        'student.delete',
+        'student',
+        'delete',
+        'Menghapus data siswa'
+    ),
+    (
+        'academic_year.read',
+        'academic_year',
+        'read',
+        'Melihat tahun ajaran'
+    ),
+    (
+        'academic_year.manage',
+        'academic_year',
+        'manage',
+        'Mengelola tahun ajaran'
+    ),
+    (
+        'semester.read',
+        'semester',
+        'read',
+        'Melihat semester'
+    ),
+    (
+        'semester.manage',
+        'semester',
+        'manage',
+        'Mengelola semester'
+    ),
+    (
+        'subject.read',
+        'subject',
+        'read',
+        'Melihat mata pelajaran'
+    ),
+    (
+        'subject.manage',
+        'subject',
+        'manage',
+        'Mengelola mata pelajaran'
+    ),
+    (
+        'classroom.read',
+        'classroom',
+        'read',
+        'Melihat kelas'
+    ),
+    (
+        'classroom.manage',
+        'classroom',
+        'manage',
+        'Mengelola kelas'
+    ),
+    (
+        'teaching_assignment.read',
+        'teaching_assignment',
+        'read',
+        'Melihat penugasan mengajar'
+    ),
+    (
+        'teaching_assignment.manage',
+        'teaching_assignment',
+        'manage',
+        'Mengelola penugasan mengajar'
+    ),
+    (
+        'homeroom_assignment.read',
+        'homeroom_assignment',
+        'read',
+        'Melihat penugasan wali kelas'
+    ),
+    (
+        'homeroom_assignment.manage',
+        'homeroom_assignment',
+        'manage',
+        'Mengelola penugasan wali kelas'
+    ),
+    (
+        'integration.read',
+        'integration',
+        'read',
+        'Melihat konfigurasi dan aktivitas integrasi'
+    ),
+    (
+        'integration.manage',
+        'integration',
+        'manage',
+        'Mengelola integrasi'
+    ),
+    (
+        'integration.sync',
+        'integration',
+        'sync',
+        'Menjalankan sinkronisasi integrasi'
+    )
+    ON CONFLICT (code) DO NOTHING;
 
--- HOMEROOM_TEACHER: administrasi kelas
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
+-- =========================================================
+-- ADMIN PERMISSIONS
+-- =========================================================
+
+INSERT INTO role_permissions (
+    role_id,
+    permission_id
+)
+SELECT
+    r.id,
+    p.id
 FROM roles r
-JOIN permissions p ON p.code = ANY(ARRAY[
-'dashboard.read',
-'student.read','student.create','student.update','student.import','student.export',
-'guardian.read','guardian.create','guardian.update',
-'classroom.read','classroom.organization.read','classroom.organization.manage',
-'classroom.schedule.read','classroom.schedule.manage',
-'classroom.duty.read','classroom.duty.manage',
-'classroom.seating.read','classroom.seating.manage',
-'classroom.agreement.read','classroom.agreement.manage',
-'attendance.read','attendance.record','attendance.update','attendance.export',
-'assessment.read','assessment.record','assessment.update','assessment.export',
-'achievement.read','achievement.create','achievement.update',
-'violation.read','violation.create','violation.update',
-'journal.read','journal.create','journal.update',
-'school.read'
-])
-WHERE r.code = 'HOMEROOM_TEACHER'
-ON CONFLICT DO NOTHING;
+         CROSS JOIN permissions p
+WHERE r.code = 'ADMIN'
+    ON CONFLICT DO NOTHING;
 
--- SUBJECT_TEACHER: capability dasar; fine-grained scope tetap diverifikasi policy
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
+-- =========================================================
+-- GURU PERMISSIONS
+-- Scope tetap divalidasi oleh domain policy.
+-- =========================================================
+
+INSERT INTO role_permissions (
+    role_id,
+    permission_id
+)
+SELECT
+    r.id,
+    p.id
 FROM roles r
-JOIN permissions p ON p.code = ANY(ARRAY[
-'dashboard.read',
-'student.read',
-'classroom.read',
-'classroom.schedule.read',
-'classroom.duty.read',
-'classroom.seating.read',
-'classroom.agreement.read',
-'attendance.read',
-'assessment.read','assessment.record','assessment.update',
-'achievement.read',
-'violation.read',
-'school.read'
-])
-WHERE r.code = 'SUBJECT_TEACHER'
-ON CONFLICT DO NOTHING;
+         JOIN permissions p
+              ON p.code IN (
+                            'teacher.read',
+                            'student.read',
+                            'academic_year.read',
+                            'semester.read',
+                            'subject.read',
+                            'classroom.read',
+                            'teaching_assignment.read',
+                            'homeroom_assignment.read'
+                  )
+WHERE r.code = 'GURU'
+    ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- WAKABID KURIKULUM PERMISSIONS
+-- =========================================================
+
+INSERT INTO role_permissions (
+    role_id,
+    permission_id
+)
+SELECT
+    r.id,
+    p.id
+FROM roles r
+         JOIN permissions p
+              ON p.code IN (
+                            'teacher.read',
+                            'student.read',
+                            'academic_year.read',
+                            'academic_year.manage',
+                            'semester.read',
+                            'semester.manage',
+                            'subject.read',
+                            'subject.manage',
+                            'classroom.read',
+                            'classroom.manage',
+                            'teaching_assignment.read',
+                            'teaching_assignment.manage',
+                            'homeroom_assignment.read',
+                            'homeroom_assignment.manage'
+                  )
+WHERE r.code = 'WAKABID_KURIKULUM'
+    ON CONFLICT DO NOTHING;
