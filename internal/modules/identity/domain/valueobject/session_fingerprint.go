@@ -1,3 +1,4 @@
+// Package valueobject Files: internal/modules/identity/domain/valueobject/session_fingerprint.go
 package valueobject
 
 import (

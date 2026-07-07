@@ -1,3 +1,4 @@
+// Package usecase Files: internal/modules/identity/application/usecase/get_current_user.go
 package usecase
 
 import (

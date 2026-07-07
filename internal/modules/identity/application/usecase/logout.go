@@ -1,3 +1,4 @@
+// Package usecase Files: internal/modules/identity/application/usecase/logout.go
 package usecase
 
 import (

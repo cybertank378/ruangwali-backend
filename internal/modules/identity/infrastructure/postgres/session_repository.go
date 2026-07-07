@@ -12,17 +12,22 @@ import (
 
 	identitydomain "github.com/ruangwali/internal/modules/identity/domain"
 	"github.com/ruangwali/internal/modules/identity/domain/entity"
+	identityrepository "github.com/ruangwali/internal/modules/identity/domain/repository"
 )
 
 type SessionRepository struct {
 	db *pgxpool.Pool
 }
 
+var _ identityrepository.SessionRepository = (*SessionRepository)(nil)
+
 func NewSessionRepository(
 	db *pgxpool.Pool,
 ) *SessionRepository {
 	if db == nil {
-		panic("postgres session repository: db nil")
+		panic(
+			"postgres session repository: db nil",
+		)
 	}
 
 	return &SessionRepository{
@@ -90,6 +95,85 @@ func (r *SessionRepository) FindByTokenHash(
 		query,
 		tokenHash,
 	)
+}
+
+func (r *SessionRepository) FindByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+) ([]*entity.RefreshSession, error) {
+	const query = `
+		SELECT
+			id,
+			user_id,
+			family_id,
+			token_hash,
+			user_agent,
+			host(ip_address),
+			expires_at,
+			last_used_at,
+			revoked_at,
+			revoke_reason,
+			replaced_by_id,
+			created_at,
+			updated_at
+		FROM refresh_sessions
+		WHERE user_id = $1
+		ORDER BY
+			last_used_at DESC NULLS LAST,
+			created_at DESC
+	`
+
+	rows, err := r.db.Query(
+		ctx,
+		query,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"gagal mengambil daftar refresh session user: %w",
+			err,
+		)
+	}
+	defer rows.Close()
+
+	sessions := make(
+		[]*entity.RefreshSession,
+		0,
+	)
+
+	for rows.Next() {
+		row, err := scanSessionRow(
+			rows,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"gagal membaca refresh session user: %w",
+				err,
+			)
+		}
+
+		session, err := row.toEntity()
+		if err != nil {
+			return nil, fmt.Errorf(
+				"gagal merehidrasi refresh session user: %w",
+				err,
+			)
+		}
+
+		sessions = append(
+			sessions,
+			session,
+		)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf(
+			"gagal melakukan iterasi refresh session user: %w",
+			err,
+		)
+	}
+
+	return sessions, nil
 }
 
 func (r *SessionRepository) Create(
@@ -219,7 +303,10 @@ func (r *SessionRepository) RevokeByUserID(
 		UPDATE refresh_sessions
 		SET
 			revoked_at = $2,
-			revoke_reason = NULLIF(BTRIM($3), ''),
+			revoke_reason = NULLIF(
+				BTRIM($3),
+				''
+			),
 			updated_at = $2
 		WHERE user_id = $1
 		  AND revoked_at IS NULL
@@ -242,6 +329,45 @@ func (r *SessionRepository) RevokeByUserID(
 	return nil
 }
 
+func (r *SessionRepository) RevokeByUserIDExcept(
+	ctx context.Context,
+	userID uuid.UUID,
+	exceptSessionID uuid.UUID,
+	reason string,
+	revokedAt time.Time,
+) error {
+	const query = `
+		UPDATE refresh_sessions
+		SET
+			revoked_at = $3,
+			revoke_reason = NULLIF(
+				BTRIM($4),
+				''
+			),
+			updated_at = $3
+		WHERE user_id = $1
+		  AND id <> $2
+		  AND revoked_at IS NULL
+	`
+
+	_, err := r.db.Exec(
+		ctx,
+		query,
+		userID,
+		exceptSessionID,
+		revokedAt.UTC(),
+		reason,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"gagal mencabut session user selain session yang dikecualikan: %w",
+			err,
+		)
+	}
+
+	return nil
+}
+
 func (r *SessionRepository) RevokeByFamilyID(
 	ctx context.Context,
 	familyID uuid.UUID,
@@ -252,7 +378,10 @@ func (r *SessionRepository) RevokeByFamilyID(
 		UPDATE refresh_sessions
 		SET
 			revoked_at = $2,
-			revoke_reason = NULLIF(BTRIM($3), ''),
+			revoke_reason = NULLIF(
+				BTRIM($3),
+				''
+			),
 			updated_at = $2
 		WHERE family_id = $1
 		  AND revoked_at IS NULL
@@ -304,13 +433,51 @@ func (r *SessionRepository) findOne(
 	query string,
 	args ...any,
 ) (*entity.RefreshSession, error) {
+	row, err := scanSessionRow(
+		r.db.QueryRow(
+			ctx,
+			query,
+			args...,
+		),
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			pgx.ErrNoRows,
+		) {
+			return nil,
+				identitydomain.ErrSessionNotFound
+		}
+
+		return nil, fmt.Errorf(
+			"gagal mengambil refresh session: %w",
+			err,
+		)
+	}
+
+	session, err := row.toEntity()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"gagal merehidrasi refresh session: %w",
+			err,
+		)
+	}
+
+	return session, nil
+}
+
+type sessionScanner interface {
+	Scan(
+		dest ...any,
+	) error
+}
+
+func scanSessionRow(
+	scanner sessionScanner,
+) (sessionRow, error) {
 	var row sessionRow
 
-	err := r.db.QueryRow(
-		ctx,
-		query,
-		args...,
-	).Scan(
+	err := scanner.Scan(
 		&row.ID,
 		&row.UserID,
 		&row.FamilyID,
@@ -326,18 +493,8 @@ func (r *SessionRepository) findOne(
 		&row.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(
-			err,
-			pgx.ErrNoRows,
-		) {
-			return nil, identitydomain.ErrSessionNotFound
-		}
-
-		return nil, fmt.Errorf(
-			"gagal mengambil refresh session: %w",
-			err,
-		)
+		return sessionRow{}, err
 	}
 
-	return row.toEntity()
+	return row, nil
 }

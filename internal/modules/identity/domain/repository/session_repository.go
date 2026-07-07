@@ -20,6 +20,11 @@ type SessionRepository interface {
 		tokenHash []byte,
 	) (*entity.RefreshSession, error)
 
+	FindByUserID(
+		ctx context.Context,
+		userID uuid.UUID,
+	) ([]*entity.RefreshSession, error)
+
 	Create(
 		ctx context.Context,
 		session *entity.RefreshSession,
@@ -33,6 +38,14 @@ type SessionRepository interface {
 	RevokeByUserID(
 		ctx context.Context,
 		userID uuid.UUID,
+		reason string,
+		revokedAt time.Time,
+	) error
+
+	RevokeByUserIDExcept(
+		ctx context.Context,
+		userID uuid.UUID,
+		exceptSessionID uuid.UUID,
 		reason string,
 		revokedAt time.Time,
 	) error

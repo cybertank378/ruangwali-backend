@@ -1,3 +1,4 @@
+// Package security files: internal/modules/identity/infrastructure/security/jwt.go
 package security
 
 import (

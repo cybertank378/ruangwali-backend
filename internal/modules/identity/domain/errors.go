@@ -31,4 +31,14 @@ var (
 		"session token tidak ditemukan: %w",
 		shareddomain.ErrNotFound,
 	)
+
+	ErrPasswordResetNotFound = fmt.Errorf(
+		"password reset tidak ditemukan: %w",
+		shareddomain.ErrNotFound,
+	)
+
+	ErrPasswordResetTokenNotFound = fmt.Errorf(
+		"password reset token tidak ditemukan: %w",
+		shareddomain.ErrNotFound,
+	)
 )

@@ -309,9 +309,7 @@ func (s *RefreshSession) ReplaceWith(
 		return err
 	}
 
-	replacement := replacementID
-
-	s.replacedByID = &replacement
+	s.replacedByID = new(replacementID)
 
 	s.Revoke(
 		"ROTATED",
@@ -430,9 +428,7 @@ func cloneStringPointer(
 		return nil
 	}
 
-	cloned := *value
-
-	return &cloned
+	return new(*value)
 }
 
 func cloneUUIDPointer(
@@ -442,7 +438,5 @@ func cloneUUIDPointer(
 		return nil
 	}
 
-	cloned := *value
-
-	return &cloned
+	return new(*value)
 }

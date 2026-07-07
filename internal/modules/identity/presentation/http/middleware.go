@@ -1,94 +1,193 @@
-package httpidentity
+//Package http Files: internal/modules/identity/presentation/http/middleware.go
+
+package http
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
-	acapp "github.com/ruangwali/internal/modules/accesscontrol/application"
-	acdomain "github.com/ruangwali/internal/modules/accesscontrol/domain"
-	"github.com/ruangwali/internal/modules/identity/infrastructure/security"
+	"github.com/ruangwali/internal/modules/identity/application/ports"
 	"github.com/ruangwali/internal/shared/application/requestcontext"
 )
 
-func Authenticate(tokens *security.TokenService, authorizer *acapp.Authorizer) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			header := r.Header.Get("Authorization")
-			if !strings.HasPrefix(header, "Bearer ") {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
+const (
+	authorizationHeader = "Authorization"
+	bearerScheme        = "Bearer"
+)
 
-			claims, err := tokens.Parse(r.Context(), strings.TrimPrefix(header, "Bearer "))
-			if err != nil {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
+var (
+	errMissingAuthorizationHeader = errors.New(
+		"authorization header tidak tersedia",
+	)
 
-			// Resolve once per request. Production dapat ditambah Redis cache.
-			permissions, err := resolvePermissions(r, authorizer, claims)
-			if err != nil {
-				http.Error(w, "authorization resolution failed", http.StatusInternalServerError)
-				return
-			}
+	errInvalidAuthorizationHeader = errors.New(
+		"authorization header tidak valid",
+	)
 
-			principal := requestcontext.Principal{
-				UserID:       claims.UserID,
-				TenantID:     claims.TenantID,
-				MembershipID: claims.MembershipID,
-				Permissions:  permissions,
-			}
+	errInvalidBearerScheme = errors.New(
+		"authorization scheme harus Bearer",
+	)
+)
 
-			next.ServeHTTP(w, r.WithContext(
-				requestcontext.WithPrincipal(r.Context(), principal),
-			))
-		})
+type AuthMiddleware struct {
+	accessTokens ports.AccessTokenService
+}
+
+func NewAuthMiddleware(
+	accessTokens ports.AccessTokenService,
+) *AuthMiddleware {
+	if accessTokens == nil {
+		panic(
+			"auth middleware: access token service nil",
+		)
+	}
+
+	return &AuthMiddleware{
+		accessTokens: accessTokens,
 	}
 }
 
-func resolvePermissions(r *http.Request, authorizer *acapp.Authorizer, claims security.Claims) (map[string]struct{}, error) {
-	// Temporary adapter: permission catalog dicek satu per satu.
-	// Ganti dengan Authorizer.ResolveAll pada iterasi berikutnya.
-	catalog := []acdomain.PermissionCode{
-		acdomain.DashboardRead,
-		acdomain.StudentRead, acdomain.StudentCreate, acdomain.StudentUpdate, acdomain.StudentDelete,
-		acdomain.AttendanceRead, acdomain.AttendanceRecord, acdomain.AttendanceUpdate,
-		acdomain.AssessmentRead, acdomain.AssessmentRecord, acdomain.AssessmentUpdate,
-		acdomain.AchievementRead, acdomain.AchievementCreate,
-		acdomain.ViolationRead, acdomain.ViolationCreate,
-		acdomain.JournalRead, acdomain.JournalCreate,
-		acdomain.SchoolRead, acdomain.SchoolUpdate,
-		acdomain.UserRead, acdomain.UserCreate,
-		acdomain.RoleRead, acdomain.RoleManage, acdomain.RoleAssign,
-		acdomain.AuditRead, acdomain.BackupCreate, acdomain.BackupRestore, acdomain.SystemReset,
+func (m *AuthMiddleware) Authenticate(
+	next http.Handler,
+) http.Handler {
+	if next == nil {
+		panic(
+			"auth middleware: next handler nil",
+		)
 	}
 
-	out := make(map[string]struct{})
-	for _, permission := range catalog {
-		ok, err := authorizer.Can(r.Context(), claims.UserID, claims.TenantID, string(permission))
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			out[string(permission)] = struct{}{}
-		}
-	}
-	return out, nil
+	return http.HandlerFunc(
+		func(
+			writer http.ResponseWriter,
+			request *http.Request,
+		) {
+			rawToken, err := extractBearerToken(
+				request,
+			)
+			if err != nil {
+				writeUnauthorized(
+					writer,
+					err,
+				)
+
+				return
+			}
+
+			claims, err := m.accessTokens.Parse(
+				request.Context(),
+				rawToken,
+			)
+			if err != nil {
+				writeUnauthorized(
+					writer,
+					errors.New(
+						"access token tidak valid",
+					),
+				)
+
+				return
+			}
+
+			ctx := requestcontext.WithUserID(
+				request.Context(),
+				claims.UserID,
+			)
+
+			next.ServeHTTP(
+				writer,
+				request.WithContext(ctx),
+			)
+		},
+	)
 }
 
-func RequirePermission(code acdomain.PermissionCode) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			principal, ok := requestcontext.PrincipalFrom(r.Context())
-			if !ok {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			if !principal.HasPermission(string(code)) {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
+func extractBearerToken(
+	request *http.Request,
+) (string, error) {
+	if request == nil {
+		return "",
+			errMissingAuthorizationHeader
 	}
+
+	header := strings.TrimSpace(
+		request.Header.Get(
+			authorizationHeader,
+		),
+	)
+
+	if header == "" {
+		return "",
+			errMissingAuthorizationHeader
+	}
+
+	parts := strings.Fields(
+		header,
+	)
+
+	if len(parts) != 2 {
+		return "",
+			errInvalidAuthorizationHeader
+	}
+
+	if !strings.EqualFold(
+		parts[0],
+		bearerScheme,
+	) {
+		return "",
+			errInvalidBearerScheme
+	}
+
+	rawToken := strings.TrimSpace(
+		parts[1],
+	)
+
+	if rawToken == "" {
+		return "",
+			errInvalidAuthorizationHeader
+	}
+
+	return rawToken, nil
+}
+
+func writeUnauthorized(
+	writer http.ResponseWriter,
+	err error,
+) {
+	writer.Header().Set(
+		"Content-Type",
+		"application/json; charset=utf-8",
+	)
+
+	writer.Header().Set(
+		"Cache-Control",
+		"no-store",
+	)
+
+	writer.WriteHeader(
+		http.StatusUnauthorized,
+	)
+
+	response := unauthorizedResponse{
+		Error: unauthorizedError{
+			Code: "UNAUTHORIZED",
+
+			Message: err.Error(),
+		},
+	}
+
+	_ = json.NewEncoder(
+		writer,
+	).Encode(response)
+}
+
+type unauthorizedResponse struct {
+	Error unauthorizedError `json:"error"`
+}
+
+type unauthorizedError struct {
+	Code string `json:"code"`
+
+	Message string `json:"message"`
 }
